@@ -4,8 +4,13 @@ import plotly.express as px
 import numpy as np
 import matplotlib.pyplot as plt
 
+import plotly.graph_objects as go
+
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
+
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
@@ -104,7 +109,7 @@ def aproxima_salario(salario):
 
 st.set_page_config(page_title="The State of AI - 2025", layout="wide")
 
-st.title("The State of AI - 2025")
+st.title("🤖 The State of AI - 2025")
 st.markdown("Uma análise do impacto do uso de inteligência artificial nas carreiras brasileiras.")
 
 @st.cache_data
@@ -152,9 +157,6 @@ aba1, aba2, aba3, aba4 = st.tabs([
     "🔮 Simulador de Satisfação com a Empresa com base no uso de IA."
 ])
 
-# ============================
-# Aba 1: Impacto da IA nos Salários
-# ============================
 with aba1:
     st.markdown("### Hipótese analisada: *profissionais que fazem uso de IA em seu cotidiano, apoiado por suas empresas " \
     "tem maiores salários que o restante dos usuários.*")
@@ -237,9 +239,6 @@ with aba1:
         st.markdown("Aqui, vemos que esse treemap valida o gráfico mostrado acima, em que os salários de empresas que priorizam a IA são maiores do que as que não priorizam."
                     "E a ordem demonstrada segue o demonstrativo do gráfico de prioridade de IA nas empresas x salário.")
 
-# ============================
-# Aba 2: Impacto na Satisfação Profissional
-# ============================
 with aba2:
     st.markdown("### Hipótese analisada: *profissionais que fazem uso de ferramentas de IA com incentivo de suas empresas "
     "apresentam maior satisfação em seus empregos.*")
@@ -333,9 +332,6 @@ with aba2:
         st.markdown("Vemos aqui que a maioria dos profissionais cujo as empresas não priorizam ferramentas de IA, tem como principal motivo de " \
         " insatisfação menos oportunidades de crescimento e aprendizado. Além disso, salários baixos e maturidade tecnológica são outras categorias de reclamação.")
         
-# ============================
-# Aba 3: Uso da IA por Cargo
-# ============================
 with aba3:
     st.subheader("Outras hipóteses sobre o uso de IA")
 
@@ -391,14 +387,18 @@ with aba3:
 with aba4:
     st.title("🔮 Simulador de Satisfação com a Empresa")
 
-    colunas_previsao_satisfacao = ["2.k_satisfeito_atualmente", '2.h_faixa_salarial', '2.f_cargo_atual', "categorias_ia", "prioridade_ia"]
+    st.markdown("Com esse simulador, podemos ter um insight da satisfação de um profissional em relação a sua empresa. " \
+    " Assim, gestores podem avaliar os insights apresentados tanto nos gráficos quanto neste simulador para ver a situação atual de seus empregados " \
+    " e tomar melhores decisões em relação a seus negócios.")
+
+    colunas_previsao_satisfacao = ["2.k_satisfeito_atualmente", '2.h_faixa_salarial', '2.f_cargo_atual', "categorias_ia", "prioridade_ia", "categoria_uso_llm_individual"]
 
     df_previsao_satisfacao = dados_limpos.filter(colunas_previsao_satisfacao)
     df_previsao_satisfacao = df_previsao_satisfacao.dropna()
 
     df_previsao_satisfacao["satisfeito"] = df_previsao_satisfacao["2.k_satisfeito_atualmente"].astype(int)
 
-    X_cat = df_previsao_satisfacao[["prioridade_ia", "categorias_ia", '2.h_faixa_salarial' ,'2.f_cargo_atual']]
+    X_cat = df_previsao_satisfacao[["categoria_uso_llm_individual", "categorias_ia", '2.h_faixa_salarial' ,'2.f_cargo_atual']]
     encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
     X_encoded = encoder.fit_transform(X_cat)
 
@@ -406,35 +406,78 @@ with aba4:
 
     feature_names = encoder.get_feature_names_out()
 
-    clf = RandomForestClassifier(n_estimators=100, class_weight='balanced')
+    clf = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
     clf.fit(X_encoded, y)
 
-    st.header("📋 Perfil do Profissional")
+    st.header("📋 Perfil do Uso de AI do Profissional e da Empresa")
 
     cargo = st.selectbox("Cargo", sorted(df_previsao_satisfacao['2.f_cargo_atual'].unique()))
-    frequencia = st.selectbox("Tipo de uso da IA generativa", sorted(df_previsao_satisfacao["categorias_ia"].unique()))
-    prioridade = st.selectbox("A empresa prioriza IA?", sorted(df_previsao_satisfacao["prioridade_ia"].unique()))
+    uso_individual = st.selectbox("Tipo de uso individual da IA generativa", sorted(df_previsao_satisfacao["categoria_uso_llm_individual"].unique()))
+    uso_empresa = st.selectbox("Tipo de uso de ferramentas de IA na empresa?", sorted(df_previsao_satisfacao["categorias_ia"].unique()))
     salario = st.selectbox("Qual o salário recebido pelo profissional?", sorted(df_previsao_satisfacao['2.h_faixa_salarial'].unique()))
 
-    X_input_df = pd.DataFrame([[prioridade, frequencia, cargo, salario]],
-                          columns=["prioridade_ia", "categorias_ia", '2.h_faixa_salarial' ,'2.f_cargo_atual'])
+    X_input_df = pd.DataFrame([[uso_individual, uso_empresa, salario, cargo]],
+                          columns=["categoria_uso_llm_individual", "categorias_ia", '2.h_faixa_salarial' ,'2.f_cargo_atual'])
     X_input_encoded = encoder.transform(X_input_df)
 
     proba = clf.predict_proba(X_input_encoded)[0][1]
 
     st.subheader("🎯 Resultado")
     st.metric("Probabilidade de estar satisfeito", f"{proba*100:.1f}%")
+    st.progress(int(proba*100), width="stretch")
 
     st.header("🔍 Explicação da Predição (SHAP)")
 
+
     explainer = shap.TreeExplainer(clf)
     shap_values = explainer.shap_values(X_encoded)
+    shap_user = explainer.shap_values(X_input_encoded)[0]
+    idx = 0
 
-    shap_user = explainer.shap_values(X_input_encoded)[1][0]
+    shap_values = explainer.shap_values(X_input_encoded)[idx]
+    expected_value = explainer.expected_value
 
-    fig, ax = plt.subplots(figsize=(10, 1))
-    shap.plots._waterfall.waterfall_legacy(explainer.expected_value[1], shap_user, feature_names=feature_names, max_display=10, show=False)
-    st.pyplot(fig)
+    features_sample = X_input_encoded[idx]
+
+    better_names = {
+        "2.h_faixa_salarial_Acima de R$ 40.001/mês": "Salário: > R$ 40.001",
+        "2.h_faixa_salarial_de R$ 4.000/mês a R$ 6.000/mês": "Salário: R$ 4k a R$ 6k",
+        "2.f_cargo_atual_Analista de BI/BI Analyst": "Cargo: Analista de BI",
+        "2.f_cargo_atual_Engenheiro de Dados/Data Engineer/Data Architect": "Cargo: Eng. de Dados",
+        "categoria_uso_llm_individual_Usa soluções gratuitas": "LLM: Gratuito",
+        "categoria_uso_llm_individual_Empresa paga": "LLM: Empresa paga",
+        "categorias_ia_Não é prioridade": "IA: Não prioritária",
+        "categorias_ia_Uso centralizado": "IA: Centralizada",
+        "categorias_ia_Independente": "IA: Uso independente",
+    }
+
+    names = feature_names
+
+    sorted_idx = np.argsort(np.abs(shap_values))[::-1][:10]
+    shap_vals_sorted = shap_values[sorted_idx]
+    names_sorted = [better_names.get(n, n) for n in better_names]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Waterfall(
+        name="",
+        orientation="h",
+        measure=["absolute"] + ["relative"] * len(shap_vals_sorted) + ["total"],
+        x=[expected_value] + shap_vals_sorted.tolist() + [sum(shap_vals_sorted) + expected_value],
+        text=["Base"] + [f"{n}: {v:+.2f}" for n, v in zip(names_sorted, shap_vals_sorted)] + ["Predição"],
+        y=["Base"] + names_sorted + ["Predição"],
+        connector={"line": {"color": "gray"}}
+    ))
+
+    fig.update_layout(
+        title="📊 Explicação da Predição com SHAP (Waterfall)",
+        showlegend=False,
+        margin=dict(l=20, r=20, t=40, b=20),
+        height=500
+    )
+
+    # Mostrar no Streamlit
+    st.plotly_chart(fig)
 
     st.header("📊 Importância Geral das Variáveis")
     with st.spinner("Calculando SHAP para amostra..."):
@@ -442,7 +485,7 @@ with aba4:
         shap_values_sample = explainer.shap_values(shap_sample)
 
         fig_summary = shap.summary_plot(
-            shap_values_sample[1],
+            shap_values_sample,
             shap_sample,
             feature_names=feature_names,
             plot_type="bar",
