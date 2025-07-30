@@ -4,6 +4,8 @@ import plotly.express as px
 import numpy as np
 import matplotlib.pyplot as plt
 
+import collections
+
 import plotly.graph_objects as go
 
 from sklearn.preprocessing import OneHotEncoder
@@ -426,9 +428,6 @@ with aba4:
     st.metric("Probabilidade de estar satisfeito", f"{proba*100:.1f}%")
     st.progress(int(proba*100), width="stretch")
 
-    st.header("🔍 Explicação da Predição (SHAP)")
-
-
     explainer = shap.TreeExplainer(clf)
     shap_values = explainer.shap_values(X_encoded)
     shap_user = explainer.shap_values(X_input_encoded)[0]
@@ -440,55 +439,100 @@ with aba4:
     features_sample = X_input_encoded[idx]
 
     better_names = {
-        "2.h_faixa_salarial_Acima de R$ 40.001/mês": "Salário: > R$ 40.001",
-        "2.h_faixa_salarial_de R$ 4.000/mês a R$ 6.000/mês": "Salário: R$ 4k a R$ 6k",
-        "2.f_cargo_atual_Analista de BI/BI Analyst": "Cargo: Analista de BI",
-        "2.f_cargo_atual_Engenheiro de Dados/Data Engineer/Data Architect": "Cargo: Eng. de Dados",
-        "categoria_uso_llm_individual_Usa soluções gratuitas": "LLM: Gratuito",
-        "categoria_uso_llm_individual_Empresa paga": "LLM: Empresa paga",
-        "categorias_ia_Não é prioridade": "IA: Não prioritária",
-        "categorias_ia_Uso centralizado": "IA: Centralizada",
-        "categorias_ia_Independente": "IA: Uso independente",
+        '2.h_faixa_salarial_Menos de R$ 1.000/mês': 'Salário < R$1.000',
+        '2.h_faixa_salarial_de R$ 1.001/mês a R$ 2.000/mês': 'R$1.001 - R$2.000',
+        '2.h_faixa_salarial_de R$ 2.001/mês a R$ 3.000/mês': 'R$2.001 - R$3.000',
+        '2.h_faixa_salarial_de R$ 3.001/mês a R$ 4.000/mês': 'R$3.001 - R$4.000',
+        '2.h_faixa_salarial_de R$ 4.001/mês a R$ 6.000/mês': 'R$4.001 - R$6.000',
+        '2.h_faixa_salarial_de R$ 6.001/mês a R$ 8.000/mês': 'R$6.001 - R$8.000',
+        '2.h_faixa_salarial_de R$ 8.001/mês a R$ 12.000/mês': 'R$8.001 - R$12.000',
+        '2.h_faixa_salarial_de R$ 12.001/mês a R$ 16.000/mês': 'R$12.001 - R$16.000',
+        '2.h_faixa_salarial_de R$ 16.001/mês a R$ 20.000/mês': 'R$16.001 - R$20.000',
+        '2.h_faixa_salarial_de R$ 20.001/mês a R$ 25.000/mês': 'R$20.001 - R$25.000',
+        '2.h_faixa_salarial_de R$ 25.001/mês a R$ 30.000/mês': 'R$25.001 - R$30.000',
+        '2.h_faixa_salarial_de R$ 30.001/mês a R$ 40.000/mês': 'R$30.001 - R$40.000',
+        '2.h_faixa_salarial_Acima de R$ 40.001/mês': 'Salário > R$40.000',
+        '2.f_cargo_atual_Analista de Dados/Data Analyst': 'Cargo: Analista de Dados',
+        '2.f_cargo_atual_Analista de BI/BI Analyst': 'Cargo: Analista de BI',
+        '2.f_cargo_atual_Analista de Negócios/Business Analyst': 'Cargo: Analista de Negócios',
+        '2.f_cargo_atual_Analista de Suporte/Analista Técnico': 'Cargo: Suporte Técnico',
+        '2.f_cargo_atual_Desenvolvedor/ Engenheiro de Software/ Analista de Sistemas': 'Cargo: Eng. de Software',
+        '2.f_cargo_atual_Engenheiro de Dados/Data Engineer/Data Architect': 'Cargo: Eng. de Dados',
+        '2.f_cargo_atual_Engenheiro de Machine Learning/ML Engineer/AI Engineer': 'Cargo: Eng. de ML/IA',
+        '2.f_cargo_atual_Arquiteto de Dados/Data Architect': 'Cargo: Arquiteto de Dados',
+        '2.f_cargo_atual_Analytics Engineer': 'Cargo: Eng. de Analytics',
+        '2.f_cargo_atual_Cientista de Dados/Data Scientist': 'Cargo: Cientista de Dados',
+        '2.f_cargo_atual_Professor/Pesquisador': 'Cargo: Professor/Pesquisador',
+        '2.f_cargo_atual_Data Product Manager/ Product Manager (PM/APM/DPM/GPM/PO)': 'Cargo: Product Manager',
+        '2.f_cargo_atual_Outras Engenharias (não inclui dev)': 'Cargo: Outra Engenharia',
+        '2.f_cargo_atual_Estatístico': 'Cargo: Estatístico',
+        '2.f_cargo_atual_Outra Opção': 'Cargo: Outro',
+        "categoria_uso_llm_individual_Usa soluções gratuitas": "LLM individual: Gratuito",
+        "categoria_uso_llm_individual_Empresa paga": "LLM individual: Empresa paga",
+        "categoria_uso_llm_individual_Uso pago individual": "LLM individual: Uso pago individual",
+        "categoria_uso_llm_individual_Não utiliza": "LLM individual: Não utiliza",
+        'categorias_ia_Independente': 'IA: Uso independente',
+        'categorias_ia_Não sabe opinar': 'IA: Não sabe opinar',
+        'categorias_ia_Não é prioridade': 'IA: Não prioritária',
+        'categorias_ia_Uso centralizado': 'IA: Uso centralizado',
+        'categorias_ia_Uso de copilots': 'IA: Uso de copilots',
+        'categorias_ia_Produto interno': 'IA: Produto interno',
+        'categorias_ia_Produto externo': 'IA: Produto externo',
+        'categorias_ia_Principal frente': 'IA: Principal frente',
+        'categorias_ia_None': 'IA: Não informado'
     }
+    
+    st.header("📊 Importância Geral das Variáveis (SHAP)")
 
-    names = feature_names
-
-    sorted_idx = np.argsort(np.abs(shap_values))[::-1][:10]
-    shap_vals_sorted = shap_values[sorted_idx]
-    names_sorted = [better_names.get(n, n) for n in better_names]
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Waterfall(
-        name="",
-        orientation="h",
-        measure=["absolute"] + ["relative"] * len(shap_vals_sorted) + ["total"],
-        x=[expected_value] + shap_vals_sorted.tolist() + [sum(shap_vals_sorted) + expected_value],
-        text=["Base"] + [f"{n}: {v:+.2f}" for n, v in zip(names_sorted, shap_vals_sorted)] + ["Predição"],
-        y=["Base"] + names_sorted + ["Predição"],
-        connector={"line": {"color": "gray"}}
-    ))
-
-    fig.update_layout(
-        title="📊 Explicação da Predição com SHAP (Waterfall)",
-        showlegend=False,
-        margin=dict(l=20, r=20, t=40, b=20),
-        height=500
-    )
-
-    # Mostrar no Streamlit
-    st.plotly_chart(fig)
-
-    st.header("📊 Importância Geral das Variáveis")
     with st.spinner("Calculando SHAP para amostra..."):
-        shap_sample = X_encoded[:300] 
+        sample_size = min(300, len(X_encoded))
+        shap_sample = X_encoded[:sample_size]
         shap_values_sample = explainer.shap_values(shap_sample)
+        if isinstance(shap_values_sample, list):  # binary classifier
+            shap_values_sample = shap_values_sample[1]
 
-        fig_summary = shap.summary_plot(
-            shap_values_sample,
-            shap_sample,
-            feature_names=feature_names,
-            plot_type="bar",
-            show=False
+        shap_df = pd.DataFrame(shap_values_sample, columns=feature_names)
+        shap_df.rename(columns=better_names, inplace=True)
+
+        mean_shap = shap_df.mean()
+        mean_abs_shap = shap_df.abs().mean()
+
+        shap_dict = dict(zip(mean_abs_shap.index, zip(mean_abs_shap, mean_shap)))
+        
+        shap_dict = collections.OrderedDict(sorted(shap_dict.items(), key=lambda x: x[1][0], reverse=True))
+
+        features = list(shap_dict.keys())[:5]
+        abs_values = [shap_dict[f][0] for f in features]
+        mean_values = [shap_dict[f][1] for f in features]
+        
+        colors = ['red' if val < 0 else 'green' for val in mean_values]
+
+        fig = px.bar(
+            x=abs_values,
+            y=features,
+            orientation='h',
+            labels={'x': 'Impacto médio absoluto (SHAP)', 'y': 'Variável'},
+            title='🔍 Importância das Variáveis segundo o modelo (SHAP)',
         )
-        st.pyplot(bbox_inches='tight', dpi=150, clear_figure=True)
+
+        fig.update_traces(
+            marker_color=colors,
+            textposition='auto'
+        )
+        fig.update_layout(
+            yaxis_title="",
+            xaxis_tickformat=".3f",
+            xaxis=dict(showgrid=True),
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=600
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("### LEGENDA: ")
+        st.markdown("   🔴 Impacto negativo na satisfação")
+        st.markdown("   🟢 Impacto positivo na satisfação")
+
+        st.markdown("Fazendo uso do método SHAP, utilizado para medir a importância das variáveis em um modelo de classificação"
+                    " podemos perceber que certos atributos como a não priorização de ferramentas de IA em uma empresa tem impacto negativo na satisfação" \
+                    " de seus funcionários até maior que os baixos salários. ")
